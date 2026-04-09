@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/infra/">
+    <Project Path="infra/src/Infra/Infra.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/DisneylandClient/DisneylandClient.csproj" />
+    <Project Path="src/SparklineShared/SparklineShared.csproj" />
+    <Project Path="src/TestConsole/TestConsole.csproj" />
+    <Project Path="src/CurrentStateCollector/CurrentStateCollector.csproj" />
+    <Project Path="src/ThemeParkApi/ThemeParkApi.csproj" />
+    <Project Path="src/ThemeParkPoller/ThemeParkPoller.csproj" Id="3eec4ff7-7692-4153-a380-5f4405cf61ce" />
+    <Project Path="src/WebSocketBroadcaster/WebSocketBroadcaster.csproj" />
+    <Project Path="src/SparklineProcessor/SparklineProcessor.csproj" />
+  </Folder>
+</Solution>

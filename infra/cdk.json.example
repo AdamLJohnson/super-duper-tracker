@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "This file is a template for the context values required by the DisneylandTracker CDK app.",
+    "",
+    "HOW TO USE",
+    "----------",
+    "Copy the two domain keys below into ONE of the following locations",
+    "(see infra/README.md for a full explanation of each option):",
+    "",
+    "  Option 1 — cdk.context.json  (recommended; already gitignored)",
+    "    Create infra/cdk.context.json and paste in just the two keys:",
+    "      {",
+    "        \"frontEndDomain\":   \"app.example.com\",",
+    "        \"hostedZoneDomain\": \"example.com\"",
+    "      }",
+    "",
+    "  Option 2 — -c flags on every command",
+    "    cdk deploy -c frontEndDomain=app.example.com -c hostedZoneDomain=example.com",
+    "",
+    "  Option 3 — cdk.json 'context' block (only if you are not sharing this file)",
+    "    Merge the two keys into the existing 'context' object in infra/cdk.json.",
+    "    WARNING: cdk.json IS committed to version control."
+  ]
+}

@@ -1,0 +1,176 @@
+.attraction-card {
+    display: flex;
+    flex-direction: column;
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+
+    .attraction-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        border-color: rgba(99,102,241,0.4);
+    }
+
+    /* Dimmed variant for Down/Closed */
+    .attraction-card.card-dim {
+        opacity: 0.55;
+        border-color: rgba(239,68,68,0.2);
+    }
+
+    /* Subtle warm tint for Refurbishment */
+    .attraction-card.card-refurb {
+        border-color: rgba(251,191,36,0.25);
+        background: #1e2530;
+    }
+
+/* Card top: name + status badge */
+.card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 1rem 1rem 0.6rem;
+}
+
+.card-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin: 0;
+    line-height: 1.3;
+}
+
+/* ── Status badges ───────────────────────────────────────────────────── */
+.status-badge {
+    flex-shrink: 0;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.badge-operating { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.badge-down      { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.badge-closed    { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.badge-refurb    { background: rgba(251,191,36,0.15);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.badge-unknown   { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
+
+/* ── Metrics section ─────────────────────────────────────────────────── */
+.card-metrics {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    padding: 0.6rem 1rem;
+    gap: 0;
+}
+
+.metric {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.68rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+.metric-divider {
+    width: 1px;
+    background: rgba(255,255,255,0.07);
+    margin: 0 0.75rem;
+    flex-shrink: 0;
+}
+
+.metric-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+/* Standby wait */
+.wait-value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+}
+
+.wait-number {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    line-height: 1;
+}
+
+.wait-unit {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 400;
+}
+
+.na-value {
+    color: #475569;
+    font-size: 1rem;
+}
+
+/* ── Trend arrows ────────────────────────────────────────────────────── */
+.trend-arrow   { font-size: 0.85rem; font-weight: 700; line-height: 1; }
+.trend-up      { color: #f87171; } /* wait rising  → bad → red   */
+.trend-down    { color: #4ade80; } /* wait falling → good → green */
+.trend-neutral { color: #475569; }
+
+/* ── Lightning Lane time ─────────────────────────────────────────────── */
+.ll-value     { font-size: 1.1rem; font-weight: 700; }
+.ll-available { color: #38bdf8; }
+.ll-finished  { color: #475569; }
+.ll-full      { color: #f87171; }
+
+/* ── Sparkline ───────────────────────────────────────────────────────── */
+.sparkline-container {
+    padding: 0 0.75rem 0.5rem;
+}
+
+.sparkline-svg {
+    display: block;
+    width: 100%;
+    height: 40px;
+    overflow: visible;
+}
+
+.sparkline-line {
+    fill: none;
+    stroke: #6366f1;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.sparkline-fill {
+    fill: rgba(99, 102, 241, 0.12);
+    stroke: none;
+}
+
+/* ── Card footer ─────────────────────────────────────────────────────── */
+.card-footer {
+    padding: 0.5rem 1rem 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.updated-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.68rem;
+    color: #475569;
+}
+

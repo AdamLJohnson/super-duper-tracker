@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>⚡ Disneyland Resort — Lightning Lane Dashboard</title>
+
+    <!-- Open Graph / Social Preview -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:title"       content="⚡ Disneyland Resort — Lightning Lane Dashboard" />
+    <meta property="og:description" content="Live Lightning Lane wait times and availability for every Disneyland Resort attraction, updated in real time." />
+    <meta property="og:image"       content="/icon-512.png" />
+    <meta property="og:url"         content="/" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="⚡ Disneyland Resort — Lightning Lane Dashboard" />
+    <meta name="twitter:description" content="Live Lightning Lane wait times and availability for every Disneyland Resort attraction, updated in real time." />
+    <meta name="twitter:image"       content="/icon-512.png" />
+
+    <!--
+        Resolve root-relative OG URLs to absolute.
+        Runs synchronously so any JS-capable crawler sees absolute URLs.
+        Crawlers that skip JS still get the root-relative fallback above,
+        which most platforms correctly resolve against the request host.
+    -->
+    <script>
+        (function () {
+            var origin = location.origin;
+
+            // og:image and og:url
+            ['og:image', 'og:url'].forEach(function (prop) {
+                var el = document.querySelector('meta[property="' + prop + '"]');
+                if (el) {
+                    var val = el.getAttribute('content');
+                    if (val === '/') {
+                        el.setAttribute('content', location.href);
+                    } else if (val.startsWith('/')) {
+                        el.setAttribute('content', origin + val);
+                    }
+                }
+            });
+
+            // twitter:image
+            var twImg = document.querySelector('meta[name="twitter:image"]');
+            if (twImg) {
+                var val = twImg.getAttribute('content');
+                if (val.startsWith('/')) {
+                    twImg.setAttribute('content', origin + val);
+                }
+            }
+        })();
+    </script>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="DisneylandClient.styles.css" rel="stylesheet" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="256x256" href="icon-256.png" />
+    <script type="importmap"></script>
+</head>
+
+<body>
+    <div id="app">
+        <svg class="loading-progress">
+            <circle r="40%" cx="50%" cy="50%" />
+            <circle r="40%" cx="50%" cy="50%" />
+        </svg>
+        <div class="loading-progress-text"></div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script>navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });</script>
+</body>
+
+</html>

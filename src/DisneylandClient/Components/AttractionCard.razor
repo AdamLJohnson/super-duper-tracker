@@ -1,0 +1,156 @@
+@using DisneylandClient.ApiClient.Models
+
+<div class="attraction-card @GetCardModifier()">
+    <div class="card-top">
+        <h3 class="card-name">@Attraction.Name</h3>
+        <span class="status-badge @GetStatusClass(Attraction.Status)">
+            @GetStatusText(Attraction.Status)
+        </span>
+    </div>
+
+    <div class="card-metrics">
+        <div class="metric">
+            <span class="metric-label">Standby Wait</span>
+            @if (Attraction.StandbyWaitTime is int wait)
+            {
+                <div class="metric-value wait-value">
+                    <span class="wait-number">@wait</span>
+                    <span class="wait-unit">min</span>
+                    <span class="trend-arrow @GetTrendClass(wait)" aria-hidden="true">
+                        @GetTrendArrow(wait)
+                    </span>
+                </div>
+            }
+            else
+            {
+                <div class="metric-value na-value">N/A</div>
+            }
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric">
+            <span class="metric-label">⚡ LL Time</span>
+            <div class="metric-value ll-value @GetLLClass()">
+                @GetLLText()
+            </div>
+        </div>
+    </div>
+
+    @if (Sparkline?.Length > 0)
+    {
+        var pts = GetSparklinePoints();
+        <div class="sparkline-container" aria-hidden="true">
+            <svg viewBox="0 0 240 40" preserveAspectRatio="none" class="sparkline-svg">
+                <polygon points="@pts 240,40 0,40" class="sparkline-fill" />
+                <polyline points="@pts" class="sparkline-line" />
+            </svg>
+        </div>
+    }
+
+    <div class="card-footer">
+        <span class="updated-chip">
+            <span aria-hidden="true">🕐</span>
+            @Attraction.LastUpdated.ToLocalTime().ToString("h:mm tt")
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AttractionDto Attraction    { get; set; } = null!;
+    [Parameter]                 public int?[]        Sparkline      { get; set; } = [];
+    [Parameter]                 public int?          PreviousWaitTime { get; set; }
+
+    // ── Status helpers ────────────────────────────────────────────────────────
+
+    private static string GetStatusClass(string? status) => status switch
+    {
+        "OPERATING"     => "badge-operating",
+        "DOWN"          => "badge-down",
+        "CLOSED"        => "badge-closed",
+        "REFURBISHMENT" => "badge-refurb",
+        _               => "badge-unknown",
+    };
+
+    private static string GetStatusText(string? status) => status switch
+    {
+        "OPERATING"     => "Operating",
+        "DOWN"          => "Down",
+        "CLOSED"        => "Closed",
+        "REFURBISHMENT" => "Refurbishment",
+        _               => status ?? "Unknown",
+    };
+
+    private string GetCardModifier() => Attraction.Status switch
+    {
+        "DOWN" or "CLOSED" => "card-dim",
+        "REFURBISHMENT"    => "card-refurb",
+        _                  => "",
+    };
+
+    // ── Lightning Lane helpers ────────────────────────────────────────────────
+
+    private string GetLLText() =>
+        Attraction.LightningLaneStatus switch
+        {
+            "AVAILABLE" => Attraction.LightningLaneTime.HasValue
+                ? Attraction.LightningLaneTime.Value.ToLocalTime().ToString("h:mm tt")
+                : "—",
+            "FINISHED"  => "Finished",
+            null        => "N/A",
+            var s       => s,
+        };
+
+    private string GetLLClass() =>
+        Attraction.LightningLaneStatus switch
+        {
+            "AVAILABLE" => "ll-available",
+            "FINISHED"  => "ll-finished",
+            _           => "ll-full",
+        };
+
+    // ── Wait-time trend helpers ───────────────────────────────────────────────
+
+    private string GetTrendArrow(int current)
+    {
+        if (PreviousWaitTime is not int prev) return "—";
+        if (current > prev) return "▲";
+        if (current < prev) return "▼";
+        return "—";
+    }
+
+    private string GetTrendClass(int current)
+    {
+        if (PreviousWaitTime is not int prev) return "trend-neutral";
+        if (current > prev) return "trend-up";
+        if (current < prev) return "trend-down";
+        return "trend-neutral";
+    }
+
+    // ── Sparkline helpers ─────────────────────────────────────────────────────
+
+    private string GetSparklinePoints()
+    {
+        // Null buckets are treated as 0 per spec so the line is always continuous.
+        var values = (Sparkline ?? []).Select(v => (double)(v ?? 0)).ToArray();
+        if (values.Length == 0) return string.Empty;
+
+        const double viewWidth  = 240;
+        const double viewHeight = 40;
+        const double padding    = 4;   // vertical breathing room in SVG units
+        const double plotHeight = viewHeight - 2 * padding;
+
+        var   max   = values.Max();
+        int   count = values.Length;
+
+        return string.Join(" ", values.Select((v, i) =>
+        {
+            double x = count == 1 ? 0 : (double)i / (count - 1) * viewWidth;
+            double y = max > 0
+                ? viewHeight - padding - v / max * plotHeight
+                : viewHeight - padding;   // flat baseline when all values are zero
+            return FormattableString.Invariant($"{x:F1},{y:F1}");
+        }));
+    }
+}
+

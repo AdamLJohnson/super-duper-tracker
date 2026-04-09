@@ -1,0 +1,372 @@
+﻿@page "/"
+@using System.Text.Json
+@inject IThemeParksApi Api
+@inject WebSocketService WsService
+@implements IDisposable
+
+<PageTitle>⚡ Disneyland Resort — Lightning Lane Dashboard</PageTitle>
+
+<div class="dashboard">
+
+    <header class="dashboard-header">
+        <div class="header-title">
+            <span class="lightning-icon" aria-hidden="true">⚡</span>
+            <div>
+                <h1 class="park-name">Disneyland Resort</h1>
+                <p class="park-subtitle">Lightning Lane Live Dashboard</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <div class="ws-pill ws-pill--@WsService.State.ToString().ToLower()"
+                 title="WebSocket: @WsService.State">
+                <span class="ws-dot" aria-hidden="true"></span>
+                <span>@GetWsLabel()</span>
+            </div>
+            @if (lastUpdated.HasValue)
+            {
+                <span class="last-updated">
+                    Updated @lastUpdated.Value.ToLocalTime().ToString("h:mm:ss tt")
+                </span>
+            }
+            <button class="refresh-btn" @onclick="RefreshDataAsync" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                    <span>Refreshing…</span>
+                }
+                else
+                {
+                    <span aria-hidden="true">↻</span>
+                    <span>Refresh</span>
+                }
+            </button>
+        </div>
+    </header>
+
+    @if (errorMessage is not null)
+    {
+        <div class="error-banner" role="alert">
+            <span aria-hidden="true">⚠</span> @errorMessage
+        </div>
+    }
+
+    @if (isLoading && attractions.Count == 0)
+    {
+        <div class="loading-state">
+            <div class="spinner-ring" aria-label="Loading"></div>
+            <p>Fetching attraction data…</p>
+        </div>
+    }
+    else if (attractions.Count > 0)
+    {
+        <div class="stats-bar">
+            <div class="stat-pill">
+                <span class="stat-value">@attractions.Count</span>
+                <span class="stat-label">LL Attractions</span>
+            </div>
+            <div class="stat-pill">
+                <span class="stat-value stat-operating">@attractions.Count(a => a.Status == "OPERATING")</span>
+                <span class="stat-label">Operating</span>
+            </div>
+            <div class="stat-pill">
+                <span class="stat-value stat-down">@attractions.Count(a => a.Status is "DOWN" or "CLOSED")</span>
+                <span class="stat-label">Down / Closed</span>
+            </div>
+            <div class="stat-pill">
+                <span class="stat-value stat-refurb">@attractions.Count(a => a.Status == "REFURBISHMENT")</span>
+                <span class="stat-label">Refurbishment</span>
+            </div>
+        </div>
+
+        <div class="attraction-grid">
+            @foreach (var attraction in attractions)
+            {
+                <AttractionCard Attraction="attraction"
+                                Sparkline="GetSparkline(attraction.EntityId)"
+                                PreviousWaitTime="GetPrevWaitTime(attraction.EntityId)" />
+            }
+        </div>
+    }
+    else if (!isLoading)
+    {
+        <div class="empty-state">
+            <p>No Lightning Lane attractions found for Disneyland Resort.</p>
+        </div>
+    }
+
+</div>
+
+@code {
+    private List<AttractionDto> attractions = [];
+    private readonly Dictionary<string, int>    previousWaitTimes = [];
+    private readonly Dictionary<string, int?[]> _sparklines       = [];
+    private bool isLoading;
+    private string? errorMessage;
+    private DateTimeOffset? lastUpdated;
+
+    // Set to true once the initial REST fetch in OnInitializedAsync completes.
+    // OnWsStateChanged uses this to suppress any catchup fetch that would otherwise
+    // race with that first load.
+    private bool _initialRefreshComplete;
+
+    // Tracks the WebSocket state seen on the previous OnWsStateChanged call so the
+    // handler can distinguish a cold-start Connecting→Connected transition (no fetch
+    // needed — data is already fresh) from a Reconnecting→Connected recovery (stale
+    // data must be reconciled with a catchup fetch).
+    private WsConnectionState _lastKnownState = WsConnectionState.Disconnected;
+
+    // Periodic heartbeat that guarantees a REST refresh every 5 minutes regardless of
+    // WebSocket state.  Acts as a safety net for silent message loss while the socket
+    // appears Connected, and is entirely independent of the reconnection-triggered
+    // catchup in OnWsStateChanged.
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to WS state changes and register the attraction_updated handler
+        // before Start() so that no early state transitions or messages are missed.
+        WsService.StateChanged += OnWsStateChanged;
+        WsService.On("attraction_updated", HandleAttractionUpdateAsync);
+        WsService.On("sparkline_updated",  HandleSparklineUpdateAsync);
+        WsService.Start();
+
+        await RefreshDataAsync();
+
+        // Allow OnWsStateChanged to trigger catchup fetches from this point on.
+        // Any Connected transition that fired before this line (i.e. the initial
+        // handshake racing with the fetch above) is intentionally suppressed.
+        _initialRefreshComplete = true;
+
+        // Start the 5-minute heartbeat after the first load so the timer never
+        // races with or duplicates the initial RefreshDataAsync call above.
+        _refreshTimer = new System.Threading.Timer(
+            _ => InvokeAsync(RefreshDataAsync),
+            state:   null,
+            dueTime: TimeSpan.FromSeconds(300),
+            period:  TimeSpan.FromSeconds(300));
+    }
+
+    private async Task RefreshDataAsync()
+    {
+        if (isLoading) return;
+
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var freshData      = await Api.GetLightningLaneAttractionsAsync();
+            var sparklineData  = await Api.GetLightningLaneSparklinesAsync();
+            var freshIds       = freshData.Select(a => a.EntityId).ToHashSet();
+
+            foreach (var sl in sparklineData)
+                _sparklines[sl.EntityId] = sl.Buckets;
+
+            // Patch or add each attraction through the unified path.
+            foreach (var updated in freshData)
+                UpdateAttraction(updated);
+
+            // Remove any attractions that are no longer returned by the API.
+            attractions.RemoveAll(a => !freshIds.Contains(a.EntityId));
+
+            SortAttractions();
+
+            lastUpdated = attractions.Count > 0
+                ? attractions.Max(a => a.LastUpdated)
+                : DateTimeOffset.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error fetching data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Centralised attraction state mutation used by both REST polling and WebSocket pushes.
+    /// Snapshots the previous wait time for trend-arrow calculation, then patches the existing
+    /// <see cref="AttractionDto"/> in-place. If <paramref name="updatedData"/> is not yet in
+    /// <see cref="attractions"/> it is appended (handles new attractions arriving via REST refresh).
+    /// </summary>
+    private void UpdateAttraction(AttractionDto updatedData)
+    {
+        var existing = attractions.FirstOrDefault(a => a.EntityId == updatedData.EntityId);
+
+        if (existing is null)
+        {
+            // New attraction — add it; no previous wait time to snapshot.
+            attractions.Add(updatedData);
+            return;
+        }
+
+        // Snapshot BEFORE overwriting so the trend arrow reflects the real delta.
+        if (existing.StandbyWaitTime.HasValue)
+            previousWaitTimes[existing.EntityId] = existing.StandbyWaitTime.Value;
+
+        existing.Status               = updatedData.Status;
+        existing.StandbyWaitTime      = updatedData.StandbyWaitTime;
+        existing.LightningLaneStatus  = updatedData.LightningLaneStatus;
+        existing.LightningLaneTime    = updatedData.LightningLaneTime;
+        existing.LastUpdated          = updatedData.LastUpdated;
+        existing.IsLightningLane      = updatedData.IsLightningLane;
+    }
+
+    /// <summary>
+    /// Enforces a consistent visual order: descending standby wait time (nulls last), then Name.
+    /// Called after every batch refresh and after every individual WebSocket patch.
+    /// </summary>
+    private void SortAttractions()
+    {
+        attractions.Sort((x, y) =>
+        {
+            // Nulls sort to the bottom regardless of direction.
+            if (x.StandbyWaitTime is null && y.StandbyWaitTime is null)
+                return string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+            if (x.StandbyWaitTime is null) return  1;
+            if (y.StandbyWaitTime is null) return -1;
+
+            int cmp = y.StandbyWaitTime.Value.CompareTo(x.StandbyWaitTime.Value);
+            return cmp != 0 ? cmp : string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    // ── Parameter lookup helpers for AttractionCard ──────────────────────────
+
+    private int?[]? GetSparkline(string entityId) =>
+        _sparklines.TryGetValue(entityId, out var sl) ? sl : null;
+
+    private int? GetPrevWaitTime(string entityId) =>
+        previousWaitTimes.TryGetValue(entityId, out var v) ? v : null;
+
+    // ── WebSocket integration ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Called by <see cref="WebSocketService"/> whenever the connection state changes.
+    /// Always schedules a re-render so the status pill updates immediately.
+    /// <para>
+    /// A catchup <see cref="RefreshDataAsync"/> is triggered only when the transition
+    /// is specifically <see cref="WsConnectionState.Reconnecting"/> →
+    /// <see cref="WsConnectionState.Connected"/>, meaning the socket recovered after a
+    /// drop (e.g. the browser was backgrounded on mobile). The cold-start path
+    /// (<see cref="WsConnectionState.Connecting"/> → <see cref="WsConnectionState.Connected"/>)
+    /// never fetches because the data loaded in <c>OnInitializedAsync</c> is already fresh.
+    /// The <c>_initialRefreshComplete</c> guard ensures no fetch fires at all before
+    /// that first load has returned.
+    /// </para>
+    /// </summary>
+    private void OnWsStateChanged()
+    {
+        var current  = WsService.State;
+        var previous = _lastKnownState;
+
+        var isRecovery = _initialRefreshComplete
+                         && previous == WsConnectionState.Reconnecting
+                         && current  == WsConnectionState.Connected;
+
+        if (isRecovery)
+            InvokeAsync(RefreshDataAsync);  // RefreshDataAsync calls StateHasChanged internally
+        else
+            InvokeAsync(StateHasChanged);
+
+        _lastKnownState = current;
+    }
+
+    /// <summary>
+    /// Handles an <c>attraction_updated</c> event dispatched by <see cref="WebSocketService"/>.
+    /// Discards messages for attractions that are not in the current LL view, then delegates
+    /// all state mutation to <see cref="UpdateAttraction"/> so both update paths share
+    /// identical trend-tracking, patching, and sorting logic.
+    /// </summary>
+    private async Task HandleAttractionUpdateAsync(JsonElement eventData)
+    {
+        if (!eventData.TryGetProperty("EntityId", out var idProp) ||
+            idProp.GetString() is not string entityId)
+            return;
+
+        // Discard events for attractions not currently visible in the LL view.
+        var existing = attractions.FirstOrDefault(a => a.EntityId == entityId);
+        if (existing is null) return;
+
+        // Build a complete DTO by overlaying event fields onto the existing values so
+        // any field absent from the partial event retains its last-known value.
+        var patch = new AttractionDto
+        {
+            EntityId             = entityId,
+            Name                 = existing.Name,
+            Status               = eventData.TryGetProperty("Status",              out var s)
+                                       ? s.GetString()
+                                       : existing.Status,
+            StandbyWaitTime      = eventData.TryGetProperty("StandbyWaitTime",     out var w)
+                                       ? (w.ValueKind == JsonValueKind.Null ? null : w.GetInt32())
+                                       : existing.StandbyWaitTime,
+            LightningLaneStatus  = eventData.TryGetProperty("LightningLaneStatus", out var lls)
+                                       ? lls.GetString()
+                                       : existing.LightningLaneStatus,
+            LightningLaneTime    = eventData.TryGetProperty("LightningLaneTime",   out var llt)
+                                       ? (llt.ValueKind == JsonValueKind.Null ? null : llt.GetDateTimeOffset())
+                                       : existing.LightningLaneTime,
+            LastUpdated          = eventData.TryGetProperty("LastUpdated",         out var lu)
+                                       ? lu.GetDateTimeOffset()
+                                       : existing.LastUpdated,
+            IsLightningLane      = eventData.TryGetProperty("IsLightningLane",     out var ll)
+                                       ? ll.GetBoolean()
+                                       : existing.IsLightningLane,
+        };
+
+        UpdateAttraction(patch);
+        SortAttractions();
+
+        lastUpdated = attractions.Count > 0
+            ? attractions.Max(a => a.LastUpdated)
+            : DateTimeOffset.UtcNow;
+
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Handles a <c>sparkline_updated</c> WebSocket event.
+    /// Extracts <c>EntityId</c> and the new <c>Buckets</c> array from the event data,
+    /// updates <see cref="_sparklines"/>, then triggers a targeted re-render so the
+    /// affected <see cref="AttractionCard"/> refreshes its SVG trend line immediately.
+    /// </summary>
+    private async Task HandleSparklineUpdateAsync(JsonElement eventData)
+    {
+        if (!eventData.TryGetProperty("EntityId", out var idProp) ||
+            idProp.GetString() is not string entityId)
+            return;
+
+        if (!eventData.TryGetProperty("Buckets", out var bucketsProp) ||
+            bucketsProp.ValueKind != JsonValueKind.Array)
+            return;
+
+        var buckets = bucketsProp.EnumerateArray()
+            .Select(el => el.ValueKind == JsonValueKind.Null ? (int?)null : el.GetInt32())
+            .ToArray();
+
+        _sparklines[entityId] = buckets;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetWsLabel() => WsService.State switch
+    {
+        WsConnectionState.Connected    => "Live",
+        WsConnectionState.Reconnecting => "Reconnecting…",
+        WsConnectionState.Connecting   => "Connecting…",
+        _                              => "Disconnected",
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        WsService.StateChanged -= OnWsStateChanged;
+        WsService.Off("attraction_updated");
+        WsService.Off("sparkline_updated");
+    }
+}
