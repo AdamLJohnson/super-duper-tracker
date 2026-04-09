@@ -96,7 +96,7 @@ namespace Infra
                 Code         = codeAsset,
                 MemorySize   = 256,
                 Timeout      = Duration.Seconds(30),
-                SnapStart   = SnapStartConf.ON_PUBLISHED_VERSIONS,
+                //SnapStart   = SnapStartConf.ON_PUBLISHED_VERSIONS,
                 Environment  = new System.Collections.Generic.Dictionary<string, string>
                 {
                     ["CONNECTIONS_TABLE"] = connectionsTable.TableName,
