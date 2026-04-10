@@ -60,7 +60,7 @@ namespace Infra
                 }),
                 MemorySize  = 256,
                 Timeout     = Duration.Seconds(30),
-                SnapStart   = SnapStartConf.ON_PUBLISHED_VERSIONS,
+                //SnapStart   = SnapStartConf.ON_PUBLISHED_VERSIONS,
                 Environment = new System.Collections.Generic.Dictionary<string, string>
                 {
                     ["STATE_TABLE_NAME"]    = props.CurrentStateTable.TableName,
