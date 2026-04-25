@@ -1,0 +1,47 @@
+<div class="sort-controls" role="group" aria-label="Sort options">
+    <label class="sort-label" for="sort-field-select">Sort by</label>
+
+    <select id="sort-field-select"
+            class="sort-select"
+            value="@SortField"
+            @onchange="OnFieldChangedAsync">
+        <option value="StandbyWait">Standby Wait</option>
+        <option value="Name">Name</option>
+        <option value="LightningLane">Lightning Lane</option>
+    </select>
+
+    <button class="sort-dir-btn"
+            @onclick="ToggleDirectionAsync"
+            title="@(SortDescending ? "Switch to Ascending" : "Switch to Descending")"
+            aria-label="@(SortDescending ? "Currently Descending, click to switch to Ascending" : "Currently Ascending, click to switch to Descending")">
+        <span class="sort-arrow" aria-hidden="true">@(SortDescending ? "↓" : "↑")</span>
+        <span class="sort-dir-label">@(SortDescending ? "Desc" : "Asc")</span>
+    </button>
+</div>
+
+@code {
+    /// <summary>
+    /// Currently-active sort field. One of: <c>"StandbyWait"</c>, <c>"Name"</c>, <c>"LightningLane"</c>.
+    /// </summary>
+    [Parameter] public string SortField       { get; set; } = "StandbyWait";
+
+    /// <summary><see langword="true"/> for descending order, <see langword="false"/> for ascending.</summary>
+    [Parameter] public bool   SortDescending  { get; set; } = true;
+
+    /// <summary>
+    /// Raised whenever the user changes the sort field or direction.
+    /// The tuple carries the new <c>(Field, Descending)</c> values.
+    /// </summary>
+    [Parameter] public EventCallback<(string Field, bool Descending)> OnSortChanged { get; set; }
+
+    private async Task OnFieldChangedAsync(ChangeEventArgs e)
+    {
+        var newField = e.Value?.ToString() ?? "StandbyWait";
+        await OnSortChanged.InvokeAsync((newField, SortDescending));
+    }
+
+    private async Task ToggleDirectionAsync()
+    {
+        await OnSortChanged.InvokeAsync((SortField, !SortDescending));
+    }
+}

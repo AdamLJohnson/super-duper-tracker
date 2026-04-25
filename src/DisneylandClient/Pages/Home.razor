@@ -2,6 +2,7 @@
 @using System.Text.Json
 @inject IThemeParksApi Api
 @inject WebSocketService WsService
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>⚡ Disneyland Resort — Lightning Lane Dashboard</PageTitle>
@@ -60,22 +61,27 @@
     else if (attractions.Count > 0)
     {
         <div class="stats-bar">
-            <div class="stat-pill">
-                <span class="stat-value">@attractions.Count</span>
-                <span class="stat-label">Attractions</span>
+            <div class="stats-pills">
+                <div class="stat-pill">
+                    <span class="stat-value">@attractions.Count</span>
+                    <span class="stat-label">Attractions</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-value stat-operating">@attractions.Count(a => a.Status == "OPERATING")</span>
+                    <span class="stat-label">Operating</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-value stat-down">@attractions.Count(a => a.Status is "DOWN" or "CLOSED")</span>
+                    <span class="stat-label">Down / Closed</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-value stat-refurb">@attractions.Count(a => a.Status == "REFURBISHMENT")</span>
+                    <span class="stat-label">Refurbishment</span>
+                </div>
             </div>
-            <div class="stat-pill">
-                <span class="stat-value stat-operating">@attractions.Count(a => a.Status == "OPERATING")</span>
-                <span class="stat-label">Operating</span>
-            </div>
-            <div class="stat-pill">
-                <span class="stat-value stat-down">@attractions.Count(a => a.Status is "DOWN" or "CLOSED")</span>
-                <span class="stat-label">Down / Closed</span>
-            </div>
-            <div class="stat-pill">
-                <span class="stat-value stat-refurb">@attractions.Count(a => a.Status == "REFURBISHMENT")</span>
-                <span class="stat-label">Refurbishment</span>
-            </div>
+            <SortControls SortField="@_sortField"
+                          SortDescending="@_sortDescending"
+                          OnSortChanged="HandleSortChangedAsync" />
         </div>
 
         <div class="attraction-grid">
@@ -104,6 +110,11 @@
     private string? errorMessage;
     private DateTimeOffset? lastUpdated;
 
+    // ── Sort state ────────────────────────────────────────────────────────
+    // One of: "StandbyWait" | "Name" | "LightningLane"
+    private string _sortField      = "StandbyWait";
+    private bool   _sortDescending = true;
+
     // Set to true once the initial REST fetch in OnInitializedAsync completes.
     // OnWsStateChanged uses this to suppress any catchup fetch that would otherwise
     // race with that first load.
@@ -123,6 +134,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Restore persisted sort preference before the first render.
+        var savedField = await JS.InvokeAsync<string?>("localStorage.getItem", "dl-sort-field");
+        var savedDesc  = await JS.InvokeAsync<string?>("localStorage.getItem", "dl-sort-desc");
+
+        if (!string.IsNullOrEmpty(savedField))
+            _sortField = savedField;
+        if (!string.IsNullOrEmpty(savedDesc) && bool.TryParse(savedDesc, out var desc))
+            _sortDescending = desc;
+
         // Subscribe to WS state changes and register the attraction_updated handler
         // before Start() so that no early state transitions or messages are missed.
         WsService.StateChanged += OnWsStateChanged;
@@ -217,22 +237,87 @@
     }
 
     /// <summary>
-    /// Enforces a consistent visual order: descending standby wait time (nulls last), then Name.
+    /// Enforces a consistent visual order based on the user's chosen sort field and direction.
     /// Called after every batch refresh and after every individual WebSocket patch.
     /// </summary>
     private void SortAttractions()
     {
-        attractions.Sort((x, y) =>
+        attractions.Sort((x, y) => _sortField switch
         {
-            // Nulls sort to the bottom regardless of direction.
-            if (x.StandbyWaitTime is null && y.StandbyWaitTime is null)
-                return string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
-            if (x.StandbyWaitTime is null) return  1;
-            if (y.StandbyWaitTime is null) return -1;
-
-            int cmp = y.StandbyWaitTime.Value.CompareTo(x.StandbyWaitTime.Value);
-            return cmp != 0 ? cmp : string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+            "Name"          => SortByName(x, y),
+            "LightningLane" => SortByLightningLane(x, y),
+            _               => SortByStandbyWait(x, y),
         });
+    }
+
+    /// <summary>
+    /// Standby Wait sort: non-OPERATING attractions and those with a null wait time always
+    /// sink to the bottom regardless of direction. Among visible attractions, direction applies.
+    /// </summary>
+    private int SortByStandbyWait(AttractionDto x, AttractionDto y)
+    {
+        bool xBottom = x.StandbyWaitTime is null || x.Status != "OPERATING";
+        bool yBottom = y.StandbyWaitTime is null || y.Status != "OPERATING";
+
+        if (xBottom && yBottom)
+            return string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        if (xBottom) return  1;
+        if (yBottom) return -1;
+
+        int cmp = _sortDescending
+            ? y.StandbyWaitTime!.Value.CompareTo(x.StandbyWaitTime!.Value)
+            : x.StandbyWaitTime!.Value.CompareTo(y.StandbyWaitTime!.Value);
+
+        return cmp != 0 ? cmp : string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Name sort: pure alphabetical; direction applies to every row.
+    /// Double quotes are stripped before comparison so that attractions like
+    /// <c>"it's a small world"</c> sort by their textual content rather than
+    /// the leading quote character. The <see cref="AttractionDto.Name"/> property
+    /// is never mutated, so quotes remain visible in the UI.
+    /// </summary>
+    private int SortByName(AttractionDto x, AttractionDto y)
+    {
+        var xName = x.Name.Replace("\"", string.Empty);
+        var yName = y.Name.Replace("\"", string.Empty);
+        int cmp = string.Compare(xName, yName, StringComparison.OrdinalIgnoreCase);
+        return _sortDescending ? -cmp : cmp;
+    }
+
+    /// <summary>
+    /// Lightning Lane sort: null return-window times sink to the bottom; direction applies
+    /// to attractions that have a return window.
+    /// </summary>
+    private int SortByLightningLane(AttractionDto x, AttractionDto y)
+    {
+        if (x.LightningLaneTime is null && y.LightningLaneTime is null)
+            return string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+        if (x.LightningLaneTime is null) return  1;
+        if (y.LightningLaneTime is null) return -1;
+
+        int cmp = _sortDescending
+            ? y.LightningLaneTime.Value.CompareTo(x.LightningLaneTime.Value)
+            : x.LightningLaneTime.Value.CompareTo(y.LightningLaneTime.Value);
+
+        return cmp != 0 ? cmp : string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Invoked by <see cref="SortControls"/> when the user changes the sort field or direction.
+    /// Persists the new preference to <c>localStorage</c> then re-applies the sort.
+    /// </summary>
+    private async Task HandleSortChangedAsync((string Field, bool Descending) sort)
+    {
+        _sortField      = sort.Field;
+        _sortDescending = sort.Descending;
+
+        await JS.InvokeVoidAsync("localStorage.setItem", "dl-sort-field", _sortField);
+        await JS.InvokeVoidAsync("localStorage.setItem", "dl-sort-desc",  _sortDescending.ToString());
+
+        SortAttractions();
+        StateHasChanged();
     }
 
     // ── Parameter lookup helpers for AttractionCard ──────────────────────────
