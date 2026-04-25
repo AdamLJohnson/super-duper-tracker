@@ -4,6 +4,7 @@ using Amazon.Lambda.Core;
 using Amazon.Lambda.SNSEvents;
 using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
+using SparklineShared;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -102,8 +103,15 @@ public class Function
             return;
         }
 
-        var status          = entity.Status ?? "UNKNOWN";
-        var isLightningLane = (entity.Queue?.HasLightningLane ?? false).ToString().ToLowerInvariant();
+        var status = entity.Status ?? "UNKNOWN";
+
+        // An entity is treated as "Lightning Lane" if it either genuinely offers
+        // a Lightning Lane queue OR if it is listed in RideConfig.SpecialInterestEntityIds
+        // (high-interest attractions that should be tracked alongside LL rides even
+        // though they don't offer Lightning Lane themselves).
+        var isLightningLane = ((entity.Queue?.HasLightningLane ?? false)
+            || RideConfig.SpecialInterestEntityIds.Contains(entity.Id))
+            .ToString().ToLowerInvariant();
 
         try
         {

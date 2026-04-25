@@ -27,14 +27,17 @@
             }
         </div>
 
-        <div class="metric-divider"></div>
+        @if (HasLightningLaneData)
+        {
+            <div class="metric-divider"></div>
 
-        <div class="metric">
-            <span class="metric-label">⚡ LL Time</span>
-            <div class="metric-value ll-value @GetLLClass()">
-                @GetLLText()
+            <div class="metric">
+                <span class="metric-label">⚡ LL Time</span>
+                <div class="metric-value ll-value @GetLLClass()">
+                    @GetLLText()
+                </div>
             </div>
-        </div>
+        }
     </div>
 
     @if (Sparkline?.Length > 0)
@@ -81,14 +84,38 @@
         _               => status ?? "Unknown",
     };
 
-    private string GetCardModifier() => Attraction.Status switch
+    private string GetCardModifier()
     {
-        "DOWN" or "CLOSED" => "card-dim",
-        "REFURBISHMENT"    => "card-refurb",
-        _                  => "",
-    };
+        var classes = new System.Text.StringBuilder();
+
+        // Operational state takes visual priority over the special-interest tint.
+        if (Attraction.Status is "DOWN" or "CLOSED")
+            classes.Append("card-dim");
+        else if (Attraction.Status == "REFURBISHMENT")
+            classes.Append("card-refurb");
+
+        // Special-interest attractions (tracked in the LL feed but without an actual
+        // Lightning Lane queue) receive a subtle teal accent so they are distinguishable
+        // from standard LL rides at a glance.
+        // if (!HasLightningLaneData && Attraction.IsLightningLane)
+        // {
+        //     if (classes.Length > 0) classes.Append(' ');
+        //     classes.Append("card-special");
+        // }
+
+        return classes.ToString();
+    }
 
     // ── Lightning Lane helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when this attraction has live Lightning Lane queue data.
+    /// Special-interest rides (e.g. Pirates of the Caribbean) are included in
+    /// the LL feed by the backend but carry no actual LL queue, so both fields
+    /// will be null. Gating the LL panel on this property keeps the card clean.
+    /// </summary>
+    private bool HasLightningLaneData =>
+        Attraction.LightningLaneStatus is not null || Attraction.LightningLaneTime.HasValue;
 
     private string GetLLText() =>
         Attraction.LightningLaneStatus switch
@@ -97,7 +124,7 @@
                 ? Attraction.LightningLaneTime.Value.ToLocalTime().ToString("h:mm tt")
                 : "—",
             "FINISHED"  => "Finished",
-            null        => "N/A",
+            null        => "—",   // safety net — panel is hidden when HasLightningLaneData is false
             var s       => s,
         };
 
@@ -106,6 +133,7 @@
         {
             "AVAILABLE" => "ll-available",
             "FINISHED"  => "ll-finished",
+            null        => "ll-neutral",  // safety net — muted rather than alarming red
             _           => "ll-full",
         };
 

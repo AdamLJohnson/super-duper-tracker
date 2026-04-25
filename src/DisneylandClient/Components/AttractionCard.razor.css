@@ -27,6 +27,17 @@
         background: #1e2530;
     }
 
+    /* Teal accent for Special-Interest rides (tracked in the LL feed but without
+       an actual Lightning Lane queue, e.g. Pirates of the Caribbean).
+       Applied in addition to any operational-state modifier. */
+    .attraction-card.card-special {
+        border-color: rgba(6,182,212,0.35);
+    }
+
+    .attraction-card.card-special:hover {
+        border-color: rgba(6,182,212,0.6);
+    }
+
 /* Card top: name + status badge */
 .card-top {
     display: flex;
@@ -134,6 +145,8 @@
 .ll-available { color: #38bdf8; }
 .ll-finished  { color: #475569; }
 .ll-full      { color: #f87171; }
+/* Safety-net for null LL status (panel is normally hidden for special-interest rides) */
+.ll-neutral   { color: #475569; }
 
 /* ── Sparkline ───────────────────────────────────────────────────────── */
 .sparkline-container {

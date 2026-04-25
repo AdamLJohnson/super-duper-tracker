@@ -106,19 +106,30 @@ namespace Infra
                 Runtime     = Runtime.DOTNET_10,
                 Architecture = Architecture.X86_64,
                 Handler = "CurrentStateCollector::CurrentStateCollector.Function::FunctionHandler",
-                Code = Code.FromAsset("../src/CurrentStateCollector", new Amazon.CDK.AWS.S3.Assets.AssetOptions
+                Code = Code.FromAsset("../src", new Amazon.CDK.AWS.S3.Assets.AssetOptions
                 {
                     // SOURCE hashing fingerprints the local .cs/.csproj files before Docker runs,
                     // so `cdk synth` skips the Docker build entirely when nothing has changed.
+                    // The build context must remain "../src" because CurrentStateCollector.csproj holds
+                    // a ProjectReference to ../SparklineShared, so Docker needs both directories.
+                    // The Exclude list keeps the hash (and the Docker context) scoped to only the
+                    // two directories that actually affect the publish output.
                     AssetHashType = Amazon.CDK.AssetHashType.SOURCE,
-                    Exclude       = ["bin", "obj", ".vs", "*.user", "*.DotSettings.user"],
+                    Exclude =
+                    [
+                        // Unrelated Lambda projects — changes here don't affect CurrentStateCollector.
+                        "DisneylandClient", "SparklineProcessor", "TestConsole",
+                        "ThemeParkApi", "ThemeParkPoller", "WebSocketBroadcaster",
+                        // Local build and IDE artefacts.
+                        "bin", "obj", ".vs", "*.user", "*.DotSettings.user",
+                    ],
                     Bundling = new BundlingOptions
                     {
-                        Image = DockerImage.FromRegistry("public.ecr.aws/sam/build-dotnet10"),
+                        Image   = DockerImage.FromRegistry("public.ecr.aws/sam/build-dotnet10"),
                         Command =
                         [
                             "bash", "-c",
-                            "dotnet publish -c Release -r linux-x64 --self-contained true -o /asset-output"
+                            "dotnet publish CurrentStateCollector/CurrentStateCollector.csproj -c Release -r linux-x64 --self-contained true -o /asset-output"
                         ],
                     },
                 }),

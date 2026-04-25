@@ -17,5 +17,8 @@
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.0.17.3" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.2.22" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SparklineShared\SparklineShared.csproj" />
+  </ItemGroup>
 </Project>
 

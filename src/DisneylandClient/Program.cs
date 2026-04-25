@@ -11,6 +11,12 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+// Blazor WebAssembly does not automatically forward the "Logging" section from
+// appsettings.json into the logging pipeline. This explicit call is required so
+// that log-level settings (e.g. Default: Warning) are respected by the browser
+// console provider.
+builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
+
 var restBaseUrl   = builder.Configuration["ApiConfig:RestBaseUrl"]
                     ?? throw new InvalidOperationException(
                         "ApiConfig:RestBaseUrl is not configured. " +
