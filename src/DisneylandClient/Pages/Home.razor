@@ -74,10 +74,10 @@
                     <span class="stat-value stat-down">@attractions.Count(a => a.Status is "DOWN" or "CLOSED")</span>
                     <span class="stat-label">Down / Closed</span>
                 </div>
-                <div class="stat-pill">
+@*                 <div class="stat-pill">
                     <span class="stat-value stat-refurb">@attractions.Count(a => a.Status == "REFURBISHMENT")</span>
                     <span class="stat-label">Refurbishment</span>
-                </div>
+                </div> *@
             </div>
             <SortControls SortField="@_sortField"
                           SortDescending="@_sortDescending"
